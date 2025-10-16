@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Priority Scheduling Visualizer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f1f5f9;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: auto;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+
+        th,
+        td {
+            padding: 6px 10px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #e2e8f0;
+            text-align: left;
+        }
+
+        tr:nth-child(odd) {
+            background: #f9fafb;
+        }
+
+        input[type="number"] {
+            width: 60px;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            background: #2563eb;
+            cursor: pointer;
+        }
+
+        button.remove {
+            background: #dc2626;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .gantt {
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 10px;
+            height: 80px;
+            overflow-x: auto;
+            position: relative;
+            background: #fff;
+        }
+
+        .bar {
+            position: absolute;
+            top: 20px;
+            height: 30px;
+            border-radius: 6px;
+            background: linear-gradient(90deg, rgba(203, 213, 225, 0.6), rgba(148, 163, 184, 0.6));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+        }
+
+        .footer {
+            font-size: 13px;
+            color: #475569;
+            margin-top: 10px;
+        }
+
+        #order {
+            min-height: 30px;
+            background: #fff;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px dashed #e2e8f0;
+        }
+
+        #averages {
+            margin-top: 8px;
+            font-weight: bold;
+            color: #0f172a;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Priority Scheduling Visualizer</h1>
+
+        <div class="controls">
+            <label><input type="checkbox" id="preemptive"> Preemptive</label>
+            <label><input type="checkbox" id="lowerIsHigher" checked> Lower number = Higher priority</label>
+            <button id="addBtn">Add Process</button>
+            <button id="runBtn">Run Scheduler</button>
+            <button id="resetBtn" title="Restore example processes">Reset</button>
+        </div>
+
+        <table id="processTable">
+            <thead>
+                <tr>
+                    <th>PID</th>
+                    <th>Arrival</th>
+                    <th>Burst</th>
+                    <th>Priority</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <h3>Ready Queue / Order</h3>
+        <div id="order"></div>
+
+        <h3>Gantt Chart</h3>
+        <div class="gantt" id="gantt"></div>
+
+        <h3>Results</h3>
+        <table id="resultsTable">
+            <thead>
+                <tr>
+                    <th>PID</th>
+                    <th>Arrival</th>
+                    <th>Burst</th>
+                    <th>Priority</th>
+                    <th>Start</th>
+                    <th>Completion</th>
+                    <th>Turnaround</th>
+                    <th>Waiting</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <div id="averages"></div>
+        <div class="footer">
+            Tip: Adjust values, toggle preemptive mode, and click Run Scheduler.
+        </div>
+    </div>
+
+    <script>
+        // initial sample processes
+        let defaultProcesses = [
+            { pid: 1, arrival: 0, burst: 5, priority: 2 },
+            { pid: 2, arrival: 1, burst: 3, priority: 1 },
+            { pid: 3, arrival: 2, burst: 8, priority: 4 },
+            { pid: 4, arrival: 3, burst: 6, priority: 3 }
+        ];
+
+        let processes = defaultProcesses.map(p => ({ ...p }));
+        let nextPid = 5;
+        let results = [];
+        let readyOrder = [];
+
+        function renderProcesses() {
+            const tbody = document.querySelector("#processTable tbody");
+            tbody.innerHTML = "";
+            processes.forEach((p, i) => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+          <td>${p.pid}</td>
+          <td><input type="number" min="0" value="${p.arrival}" onchange="updateProcess(${i}, 'arrival', this.value)" /></td>
+          <td><input type="number" min="1" value="${p.burst}" onchange="updateProcess(${i}, 'burst', this.value)" /></td>
+          <td><input type="number" min="1" value="${p.priority}" onchange="updateProcess(${i}, 'priority', this.value)" /></td>
+          <td><button class="remove" onclick="removeProcess(${i})">Remove</button></td>
+        `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function updateProcess(i, field, value) {
+            // ensure number conversion and minimum constraints
+            const num = Number(value);
+            if (Number.isNaN(num)) return;
+            if (field === "arrival") processes[i][field] = Math.max(0, Math.floor(num));
+            else if (field === "burst") processes[i][field] = Math.max(1, Math.floor(num));
+            else if (field === "priority") processes[i][field] = Math.max(1, Math.floor(num));
+            renderProcesses(); // keep UI in sync
+        }
+
+        function removeProcess(i) {
+            processes.splice(i, 1);
+            renderProcesses();
+        }
+
+        document.getElementById("addBtn").onclick = () => {
+            processes.push({ pid: nextPid++, arrival: 0, burst: 1, priority: 1 });
+            renderProcesses();
+        };
+
+        document.getElementById("resetBtn").onclick = () => {
+            processes = defaultProcesses.map(p => ({ ...p }));
+            nextPid = Math.max(...processes.map(p => p.pid)) + 1;
+            results = [];
+            readyOrder = [];
+            renderProcesses();
+            renderOrder();
+            renderGantt();
+            renderResults();
+        };
+
+        // wire the run button (this was missing)
+        document.getElementById("runBtn").onclick = runScheduler;
+
+        function isHigherPriority(a, b, lowerIsHigher) {
+            return lowerIsHigher ? a.priority < b.priority : a.priority > b.priority;
+        }
+
+        function runScheduler() {
+            if (!processes.length) {
+                alert("Add at least one process.");
+                return;
+            }
+
+            const preemptive = document.getElementById("preemptive").checked;
+            const lowerIsHigher = document.getElementById("lowerIsHigher").checked;
+
+            // clone and sort by arrival then pid to have deterministic behavior
+            const ps = processes.map(p => ({ ...p }));
+            ps.sort((a, b) => a.arrival - b.arrival || a.pid - b.pid);
+
+            const out = preemptive ? runPreemptive(ps, lowerIsHigher) : runNonPreemptive(ps, lowerIsHigher);
+            results = out.res;
+            readyOrder = out.order;
+            renderResults();
+            renderOrder();
+            renderGantt();
+        }
+
+        function runNonPreemptive(ps, lowerIsHigher) {
+            const n = ps.length;
+            let time = 0, done = Array(n).fill(false);
+            const res = [], order = [];
+
+            // advance time to first arrival if needed
+            if (n && ps[0].arrival > 0) time = ps[0].arrival;
+
+            for (let completed = 0; completed < n; completed++) {
+                let idx = -1;
+                for (let i = 0; i < n; i++) {
+                    if (!done[i] && ps[i].arrival <= time) {
+                        if (idx === -1 ||
+                            isHigherPriority(ps[i], ps[idx], lowerIsHigher) ||
+                            (ps[i].priority === ps[idx].priority && ps[i].arrival < ps[idx].arrival))
+                            idx = i;
+                    }
+                }
+
+                if (idx === -1) {
+                    // no process is ready -> jump to next arrival time of non-done processes
+                    const next = Math.min(...ps.map((p, i) => done[i] ? Infinity : p.arrival));
+                    time = next;
+                    completed--; // counteract for-loop increment
+                    continue;
+                }
+
+                const start = Math.max(time, ps[idx].arrival);
+                const completion = start + ps[idx].burst;
+                const turnaround = completion - ps[idx].arrival;
+                const waiting = turnaround - ps[idx].burst;
+                res.push({ ...ps[idx], start, completion, turnaround, waiting });
+                order.push({ pid: ps[idx].pid, start, completion });
+                done[idx] = true;
+                time = completion;
+            }
+
+            // keep results ordered by PID for table consistency
+            const resByPid = res.slice().sort((a, b) => a.pid - b.pid);
+            return { res: resByPid, order };
+        }
+
+        function runPreemptive(ps, lowerIsHigher) {
+            const n = ps.length;
+            const remaining = ps.map(p => p.burst);
+            const completion = Array(n).fill(null);
+            const timeline = [];
+            let time = 0;
+            let completed = 0;
+
+            // start time at earliest arrival
+            time = Math.min(...ps.map(p => p.arrival));
+
+            while (completed < n) {
+                let idx = -1;
+                for (let i = 0; i < n; i++) {
+                    if (ps[i].arrival <= time && remaining[i] > 0) {
+                        if (idx === -1 ||
+                            isHigherPriority(ps[i], ps[idx], lowerIsHigher) ||
+                            (ps[i].priority === ps[idx].priority && ps[i].arrival < ps[idx].arrival))
+                            idx = i;
+                    }
+                }
+
+                if (idx === -1) {
+                    // no process is ready at current time -> jump to next arrival
+                    const nextArrivals = ps.map((p, i) => remaining[i] > 0 ? p.arrival : Infinity).filter(v => v > time);
+                    if (!nextArrivals.length) break; // nothing more
+                    time = Math.min(...nextArrivals);
+                    continue;
+                }
+
+                // execute for one time unit (granularity = 1)
+                timeline.push({ pid: ps[idx].pid, start: time, end: time + 1, idx });
+                remaining[idx]--;
+                time++;
+                if (remaining[idx] === 0) {
+                    completion[idx] = time;
+                    completed++;
+                }
+            }
+
+            // merge contiguous segments of same pid
+            const merged = [];
+            for (const seg of timeline) {
+                if (merged.length && merged[merged.length - 1].pid === seg.pid && merged[merged.length - 1].end === seg.start) {
+                    merged[merged.length - 1].end = seg.end;
+                } else {
+                    merged.push({ pid: seg.pid, start: seg.start, end: seg.end });
+                }
+            }
+
+            // prepare result rows mapped by PID order
+            const res = ps.map((p, i) => {
+                const comp = completion[i] ?? time;
+                const turnaround = comp - p.arrival;
+                const waiting = turnaround - p.burst;
+                const firstSeg = timeline.find(seg => seg.pid === p.pid);
+                const start = firstSeg ? firstSeg.start : "-";
+                return { ...p, start, completion: comp, turnaround, waiting };
+            });
+
+            const order = merged.map(m => ({ pid: m.pid, start: m.start, completion: m.end }));
+            const resByPid = res.slice().sort((a, b) => a.pid - b.pid);
+            return { res: resByPid, order };
+        }
+
+        function renderResults() {
+            const tbody = document.querySelector("#resultsTable tbody");
+            tbody.innerHTML = "";
+            if (!results || !results.length) {
+                tbody.innerHTML = <tr><td colspan="8" style="text-align:center;color:#64748b">No results yet. Click Run Scheduler.</td></tr>;
+                document.getElementById("averages").innerText = "";
+                return;
+            }
+
+            results.forEach(r => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+          <td>${r.pid}</td><td>${r.arrival}</td><td>${r.burst}</td><td>${r.priority}</td>
+          <td>${r.start}</td><td>${r.completion}</td><td>${r.turnaround}</td><td>${r.waiting}</td>
+        `;
+                tbody.appendChild(row);
+            });
+
+            // guard against division by zero
+            const avgT = (results.reduce((a, b) => a + (Number(b.turnaround) || 0), 0) / results.length) || 0;
+            const avgW = (results.reduce((a, b) => a + (Number(b.waiting) || 0), 0) / results.length) || 0;
+            document.getElementById("averages").innerText = Average Turnaround: ${avgT.toFixed(2)}, Average Waiting: ${avgW.toFixed(2)};
+        }
+
+        function renderOrder() {
+            const orderDiv = document.getElementById("order");
+            if (!readyOrder || !readyOrder.length) {
+                orderDiv.innerHTML = '<span style="color:#64748b">No timeline yet. Click Run Scheduler.</span>';
+                return;
+            }
+            orderDiv.innerHTML = readyOrder.map(r => P${r.pid}: ${r.start} → ${r.completion}).join("<br>");
+        }
+
+        function renderGantt() {
+            const gantt = document.getElementById("gantt");
+            gantt.innerHTML = "";
+            if (!readyOrder || !readyOrder.length) {
+                gantt.textContent = "No timeline yet.";
+                return;
+            }
+
+            const start = Math.min(...readyOrder.map(r => r.start));
+            const end = Math.max(...readyOrder.map(r => r.completion));
+            const total = end - start || 1; // avoid division by zero
+
+            // create a small time ruler (optional)
+            // render bars
+            readyOrder.forEach(seg => {
+                const div = document.createElement("div");
+                const left = ((seg.start - start) / total) * 100;
+                const width = ((seg.completion - seg.start) / total) * 100;
+                div.className = "bar";
+                div.style.left = left + "%";
+                div.style.width = width + "%";
+                div.textContent = P${seg.pid} (${seg.start}-${seg.completion});
+                gantt.appendChild(div);
+            });
+
+            // draw time ticks (simple)
+            const ticks = document.createElement("div");
+            ticks.style.position = "absolute";
+            ticks.style.left = 0;
+            ticks.style.top = "55px";
+            ticks.style.width = "100%";
+            ticks.style.display = "flex";
+            ticks.style.justifyContent = "space-between";
+            ticks.style.fontSize = "11px";
+            ticks.style.color = "#475569";
+            for (let t = start; t <= end; t++) {
+                const tick = document.createElement("span");
+                tick.textContent = t;
+                ticks.appendChild(tick);
+            }
+            gantt.appendChild(ticks);
+        }
+
+        // initial render
+        renderProcesses();
+        renderOrder();
+        renderGantt();
+        renderResults();
+    </script>
+</body>
+
+</html>
