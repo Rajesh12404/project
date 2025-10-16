@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Number Guess Duel</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .container {
+      text-align: center;
+      background: #1e1e1e;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.4);
+    }
+
+    input {
+      padding: 10px;
+      width: 100px;
+      font-size: 16px;
+      border: none;
+      border-radius: 6px;
+      margin-top: 15px;
+      text-align: center;
+    }
+
+    button {
+      padding: 10px 20px;
+      margin: 10px;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      background: #007bff;
+      color: #fff;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+
+    .message {
+      margin-top: 20px;
+      font-size: 18px;
+    }
+
+    .success {
+      color: #00ff7f;
+    }
+
+    .error {
+      color: #ff5555;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Number Guess Duel</h1>
+    <p>Guess a number between 1 and 100</p>
+    <input type="number" id="guess" min="1" max="100" placeholder="Enter" />
+    <div>
+      <button id="checkBtn">Check</button>
+      <button id="resetBtn">Restart</button>
+    </div>
+    <p class="message" id="message"></p>
+  </div>
+
+  <script>
+    let randomNumber = Math.floor(Math.random() * 100) + 1;
+    let attempts = 0;
+
+    const guessInput = document.getElementById('guess');
+    const message = document.getElementById('message');
+    const checkBtn = document.getElementById('checkBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    checkBtn.addEventListener('click', () => {
+      const guess = Number(guessInput.value);
+      attempts++;
+
+      if (!guess || guess < 1 || guess > 100) {
+        message.textContent = "Enter a number between 1 and 100.";
+        message.className = "message error";
+        return;
+      }
+
+      if (guess === randomNumber) {
+        message.textContent = `🎯 Correct! You guessed it in ${attempts} tries.`;
+        message.className = "message success";
+        document.body.style.background = "#004d00";
+      } else if (guess < randomNumber) {
+        message.textContent = "Too low! Try again.";
+        message.className = "message error";
+      } else {
+        message.textContent = "Too high! Try again.";
+        message.className = "message error";
+      }
+    });
+
+    resetBtn.addEventListener('click', () => {
+      randomNumber = Math.floor(Math.random() * 100) + 1;
+      attempts = 0;
+      guessInput.value = '';
+      message.textContent = '';
+      document.body.style.background = "#111";
+    });
+  </script>
+</body>
+</html>
